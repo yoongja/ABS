@@ -1,43 +1,53 @@
-# Adaptive Beam Search for Reasoning Tasks
+# [PAKDD 2026] Adaptive Beam Search with Shannon Entropy for Data-centric Reasoning in LLMs
 
-This project supports running adaptive beam search on a variety of reasoning tasks. We provide implementations for multiple models and prompting strategies.
+[![Python 3.8](https://img.shields.io/badge/python-3.8-blue.svg)](https://www.python.org/downloads/release/python-3820/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT-green)](https://openai.com/)
+[![LLaMA](https://img.shields.io/badge/Meta-LLaMA-purple)](https://ai.meta.com/llama/)
+
+Welcome to the **Adaptive Beam Search** repository! This repo is official code for " Adaptive Beam Search with Shannon Entropy for Data-centric Reasoning in LLMs" , PAKDD 2026 by Yoonji Kim, Yujin Jeong, Jieun Kim.
+
+This repository supports running adaptive beam search on a variety of reasoning tasks across multiple models and prompting strategies.
 
 ---
 
-## Prompt Overview
+## 📋 Prompt Overview
 
 * **CoT**: Chain-of-Thought
 * **ToT**: Tree-of-Thoughts
 
 ### Arithmetic Reasoning
--   GSM8K: [CoT](/(gpt or llama)/prompts/arithmetic/gsm8k.py)
--   AQUA: [CoT](/(gpt or llama)/prompts/arithmetic/aqua.py)
+- GSM8K: [CoT](/(gpt%20or%20llama)/prompts/arithmetic/gsm8k.py)
+- AQUA: [CoT](/(gpt%20or%20llama)/prompts/arithmetic/aqua.py)
 
 ### Symbolic Reasoning
--   Date Understanding: [CoT](/(gpt or llama)/prompts/symbolic/date_understanding.py)
+- Date Understanding: [CoT](/(gpt%20or%20llama)/prompts/symbolic/date_understanding.py)
 
 ### Commonsense Reasoning
--   CSQA: [CoT](/(gpt or llama)/prompts/commonsense/csqa.py)
--   StrategyQA: [CoT](/(gpt or llama)/prompts/commonsense/strategyqa.py)
+- CSQA: [CoT](/(gpt%20or%20llama)/prompts/commonsense/csqa.py)
+- StrategyQA: [CoT](/(gpt%20or%20llama)/prompts/commonsense/strategyqa.py)
 
 ### Algorithmic Reasoning
--   Game of 24: [ToT](/gpt/prompts/algorithmic/game_of_24.py)
+- Game of 24: [ToT](/gpt/prompts/algorithmic/game_of_24.py)
 
 ---
 
-## Setup Instructions
+## 🛠️ How to Use
 
-### 1. Install Requirements
+### 1. **Clone the Repository**
+```bash
+git clone https://github.com/yoongja/ABS.git
+cd ABS
+```
 
-Install all dependencies from `requirements.txt`:
+### 2. **Install Requirements**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Prepare Environment Variables
+### 3. **Prepare Environment Variables**
 
-This project may require API keys or paths to local models. Create a `.env` file in the project root and add the necessary variables.
+Create a `.env` file in the project root and add the necessary variables:
 
 ```env
 # For using OpenAI models like GPT-4
@@ -47,9 +57,9 @@ OPENAI_API_KEY="your-openai-api-key"
 LLAMA_MODEL_PATH="/path/to/your/llama/weights"
 ```
 
-### 3. Prepare the Data
+### 4. **Prepare the Data**
 
-Create a `data/` directory in the project root and place the dataset files inside. The expected structure is:
+Create a `data/` directory in the project root and place the dataset files inside:
 
 ```
 data/
@@ -63,17 +73,22 @@ data/
 
 ---
 
-## Running Experiments
+## 🚀 Running Experiments
 
-Here is an example of how to run an experiment for the **GSM8K** task using the **llama2** model with adaptive beam search.
+### GPT (OpenAI)
 
-First, navigate to the project's LLaMA directory:
+Navigate to the GPT directory and run:
+
+```bash
+cd adaptive_beam_search/gpt/
+bash scripts/run_gsm8k.sh
+```
+
+### LLaMA
+
+Navigate to the LLaMA directory and run:
 
 ```bash
 cd adaptive_beam_search/llama/
-```
-
-Then, run the experiment script for the desired task:
-
-```bash
 bash scripts/run_gsm8k.sh
+```
