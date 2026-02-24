@@ -52,9 +52,6 @@ Create a `.env` file in the project root and add the necessary variables:
 ```env
 # For using OpenAI models like GPT-4
 OPENAI_API_KEY="your-openai-api-key"
-
-# For using local models like LLaMA (if applicable)
-LLAMA_MODEL_PATH="/path/to/your/llama/weights"
 ```
 
 ### 4. **Prepare the Data**

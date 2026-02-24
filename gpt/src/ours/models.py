@@ -1,9 +1,9 @@
 import os
 import openai
-import backoff 
-# from dotenv import load_dotenv
+import backoff
+from dotenv import load_dotenv
 import logging
-# load_dotenv()
+load_dotenv()
 completion_tokens = prompt_tokens = 0
 
 api_key = os.getenv("OPENAI_API_KEY", "")
