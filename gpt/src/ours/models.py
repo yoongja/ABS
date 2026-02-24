@@ -30,7 +30,6 @@ def chatgpt(messages, model="gpt-4o-mini", temperature=0.7, max_tokens=128, n=1,
     """
     ChatGPT wrapper for OpenAI API calls.
     """
-    # breakpoint()
     global completion_tokens, prompt_tokens
     outputs = []
 

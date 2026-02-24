@@ -62,7 +62,7 @@ class DateUnderstandingTask(Task):
     
     def test_output(self, idx: int, output: str):
         input = self.get_input(idx)
-        gts = input['target_scores']    # target dict with keys and value(맞으면 1)
+        gts = input['target_scores']  # target dict: keys are date strings, value 1 = correct
         gt = [key for key, value in gts.items() if value == 1][0]
         
         if 'Q:' in output:
@@ -114,10 +114,9 @@ class DateUnderstandingTask(Task):
                     logprob = o.get('logprob', None)
                     if token == 'yes' and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")

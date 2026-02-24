@@ -16,8 +16,8 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 def interpolate(x, in_range, out_range):
-    a, b = in_range      # 예: [0, 1]
-    c, d = out_range     # 예: [10, 3]
+    a, b = in_range      # e.g., [0, 1]
+    c, d = out_range     # e.g., [10, 3]
     
     ratio = (x - a) / (b - a)
     return c + ratio * (d - c)

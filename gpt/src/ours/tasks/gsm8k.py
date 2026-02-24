@@ -49,7 +49,6 @@ class GSM8KTask(Task):
                 parsed_output = output.strip().split('Q:')[0]
             else: parsed_output = output
             
-            # answer 부분 parsing
             ans = parsed_output.strip().split('###')[-1].strip().lower()
             pattern = r"\d+(?:,\d+)*(?:\.\d+)?"
             ans_list = re.findall(pattern, ans)
@@ -85,24 +84,20 @@ class GSM8KTask(Task):
         """
         probability = 0.0
         try:
-            # 모든 토큰의 top_logprobs를 순회
             contents = value_outputs[0].get("logprobs", {}).get("content", [])
             for token_info in contents:
                 top_logprobs = token_info.get("top_logprobs", [])
                 for entry in top_logprobs:
                     token = entry.get('token', '').lower()
                     logprob = entry.get('logprob')
-                    # 'valid' 포함 & 'invalid' 미포함일 때 첫 번째만 사용
+                    # use first token containing 'valid' but not 'invalid'
                     if logprob is not None and 'valid' in token and 'invalid' not in token:
-                        # 첫 valid 토큰 로그확률로 확률 계산
                         probability = math.exp(logprob + 1e-9)
-                        # 바로 반환 (첫 번째만 고려)
                         print(f"First valid token: {token}, logprob: {logprob}")
                         print(f"Converted Probability: {probability:.6f}")
                         return probability
         except Exception as e:
             print(f"[ERROR] value_outputs_unwrap failed: {e}")
 
-        # valid 토큰이 없거나 예외 시 0 반환
         print("No valid token found; returning probability=0.0")
         return probability

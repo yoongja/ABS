@@ -58,7 +58,6 @@ class Game24Task(Task):
     def cot_prompt_wrap(x: str, y:str='', k:int=4) -> str:
         temp = y.strip().split('\n')
         current_numbers = get_current_numbers(y if y else x)
-        # breakpoint()
         if len(temp) == 3:
             return cot_prompt.format(input=x) + y + "Answer:"
         else:
@@ -92,13 +91,10 @@ class Game24Task(Task):
             if 'no' in text_output:
                 invalid = True
         valid_logprob = None
-        # print(f"Text: {text_output}")
-        # breakpoint()
         for c in value_outputs[0]["logprobs"]["content"]:
             if 'yes' in c['token'].lower():
                 valid_logprob = c['logprob']
                 break
-                # breakpoint()
             else:
                 top_logprobs = c['top_logprobs']
                 for o in top_logprobs:
@@ -106,10 +102,9 @@ class Game24Task(Task):
                     logprob = o.get('logprob', None)
                     if token == 'yes' and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")

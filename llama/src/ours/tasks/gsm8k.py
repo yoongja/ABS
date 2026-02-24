@@ -90,10 +90,9 @@ class GSM8KTask(Task):
                     logprob = o.get('logprob', None)
                     if token == 'yes' and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")

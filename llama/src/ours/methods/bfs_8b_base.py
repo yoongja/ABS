@@ -9,7 +9,7 @@ from src.ours.utils import get_logger, interpolate, stop_sign
 logger = get_logger(__name__)
 
 def clean_generated_text(text):
-    # subword marker 제거
+    # remove subword markers
     text = text.replace("Ġ", " ")
     text = text.replace("Ċ", "\n")
     return text.strip()
@@ -28,7 +28,7 @@ def beam_get_samples(task, x, y, n_generate_sample, prompt_sample, llama, genera
     try:
         outputs = llama.generate_output(prompts, attn_masks, generation_config)
         for output in outputs:
-            output["text"] = clean_generated_text(output["text"])  # ✅ 깨끗하게 정리된 텍스트
+            output["text"] = clean_generated_text(output["text"])
             samples.append(output)
     except Exception as e:
         print(f"Error during Llama sampling: {e}")
@@ -64,7 +64,6 @@ def beam_get_samples(task, x, y, n_generate_sample, prompt_sample, llama, genera
         except Exception as e:
             print(f"Error processing sample {i}: {e}")
             return None
-    # breakpoint()
     if not probs or not lines:
         print("Error: No valid samples were generated.")
         return None
@@ -82,14 +81,13 @@ def base_beam_search(logit_probabilities, beam_adjustment, n_select_sample):
     if len(logit_probabilities) == 0 :
         return None
     current_combined_scores = logit_probabilities
-    sorted_indices = np.argsort(-current_combined_scores)  # 음수 부호로 내림차순 정렬
+    sorted_indices = np.argsort(-current_combined_scores)
     descend_order_combined_scores = current_combined_scores[sorted_indices]
 
     descend_order_combined_scores = np.exp(descend_order_combined_scores) / np.sum(np.exp(descend_order_combined_scores))
     beam = n_select_sample
     selected_ids = sorted_indices[:beam]
-        
-    # 선택된 모든 인덱스에 대해 정보를 저장
+
     selection_info = [
         {
             "Index": int(s),
@@ -106,36 +104,36 @@ def base_beam_search(logit_probabilities, beam_adjustment, n_select_sample):
 def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_adjustment, n_select_sample):
     if len(logit_probabilities) == 0 :
         return None
-    # 결합 점수 계산
+    # compute combined trust score
     current_combined_scores = (logit_probabilities ** lambda_value) * (value_probabilities ** (1 - lambda_value))
     current_combined_scores = np.log(current_combined_scores)
 
-    # 원래의 Idx를 찾기위함
-    sorted_indices = np.argsort(-current_combined_scores)  # 음수 부호로 내림차순 정렬
+    # sort by descending combined score; argsort with negative for descending order
+    sorted_indices = np.argsort(-current_combined_scores)
     descend_order_combined_scores = current_combined_scores[sorted_indices]
 
     descend_order_combined_scores = np.exp(descend_order_combined_scores) / np.sum(np.exp(descend_order_combined_scores))
 
     if beam_adjustment:
-        # 정규화
+        # normalize to get sampling probabilities
         sampling_probs = descend_order_combined_scores / np.sum(descend_order_combined_scores)
         print(f"Initial sampling probabilities: {sampling_probs}")
-        
-        # entropy normalize를 위한 max entropy 계산
+
+        # compute max entropy for normalization
         max_probs = np.array([1/len(sampling_probs)] * len(sampling_probs))
         max_entropy = -np.sum(max_probs * np.log(max_probs + 1e-9))
 
-        # 동적 빔 너비 조정을 위한 엔트로피 계산
+        # compute normalized entropy for dynamic beam width adjustment
         entropy = -np.sum(sampling_probs * np.log(sampling_probs + 1e-9))
         norm_entropy = entropy/max_entropy
 
         selected_ids = list(range(len(current_combined_scores)))
-        selection_info = []  # 결과를 저장할 리스트
+        selection_info = []
         cumulative_prob = 0.0
-        threshold = norm_entropy  # 또는 0.9 등 수동 설정도 가능
+        threshold = norm_entropy
 
         cumul_pass = False
-        for s, c in enumerate(descend_order_combined_scores):  # 높은 순으로 점수 정렬되어 있음
+        for s, c in enumerate(descend_order_combined_scores):  # iterate in descending score order
             original_index = int(sorted_indices[s])
             cumulative_prob += c
             selected_ids.append(original_index)
@@ -150,22 +148,20 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
             }
             selection_info.append(info)
 
-            # 멈출 조건: 누적 확률 질량이 엔트로피 기준을 초과
+            # stop when cumulative probability mass exceeds the entropy threshold
             if cumulative_prob >= threshold:
                 cumul_pass = True
                 break
         if cumul_pass == True:
             for info in selection_info:
                 info["Pass"] = bool(True)
-        # 0.9에 맞춰서
         if threshold > 0.9:
-            print(f"threshold 0.9이상 beam_size : {len(selection_info)}")
-            # 원래의 평균을 고려함
+            print(f"threshold > 0.9, beam_size before adjustment: {len(selection_info)}")
             score = np.clip(np.mean(current_combined_scores), 0, 1)
             beam_size = int(interpolate(score, [0, 1], [10, 2]))
             selection_info = selection_info[:beam_size]
             selected_ids = sorted_indices[:beam_size]
-            print(f"조정 이후 beam_size : {beam_size}")
+            print(f"beam_size after adjustment: {beam_size}")
 
         if len(selected_ids) == 0:
             max_index = np.argmax(current_combined_scores)
@@ -173,8 +169,6 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
             print(f"No valid states found, selecting the max score index: {max_index}")
 
         print(f"Valid states (B(S_t)): {selected_ids}")
-        # 동적 빔 너비 계산
-        # 만약 Threshold를 넘는 후보가 없다면, 최고 Score 하나라도 선택
         beam = max(1, len(selected_ids))
         print(f"After beam size: {beam}")
         
@@ -182,8 +176,7 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
         selected_ids = list(range(len(current_combined_scores)))
         beam = n_select_sample
         print(f"After beam size: {beam}")
-        
-        # 선택된 모든 인덱스에 대해 정보를 저장
+
         selection_info = [
             {
                 "Index": int(s),
@@ -194,7 +187,6 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
             }
             for s, c in enumerate(current_combined_scores)
         ]
-    # breakpoint()
     return selected_ids, norm_entropy, selection_info
 
 # idx -> task input idx
@@ -249,11 +241,11 @@ def solve(args, task, idx, to_print=True):
             'new_ys': new_ys,
             'values': None,
             'select_new_ys': select_new_ys,
-            'beam': len(selected_ids),  # 현재 Beam 크기
-            'entropy': entropy,  # 현재 Entropy 값
-            'selection_info': selection_info,  # 선택 정보
-            'logit_probabilities': logit_probabilities,  # 현재 로짓 확률
-            'value_probabilities': None  # 현재 가치 확률
+            'beam': len(selected_ids),
+            'entropy': entropy,
+            'selection_info': selection_info,
+            'logit_probabilities': logit_probabilities,
+            'value_probabilities': None
         })
         ys = select_new_ys
         

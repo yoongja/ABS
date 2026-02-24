@@ -25,18 +25,13 @@ def inspect_and_convert(obj, depth=0):
     """Recursively inspect types and convert ndarray to list."""
     indent = "  " * depth  # Indentation for better readability
     if isinstance(obj, dict):
-        # print(f"{indent}Inspecting dict:")
         for key, value in obj.items():
-            # print(f"{indent}- Key: {key}, Type: {type(value)}")
             obj[key] = inspect_and_convert(value, depth + 1)
     elif isinstance(obj, list):
-        # print(f"{indent}Inspecting list:")
         obj = [inspect_and_convert(item, depth + 1) for item in obj]
     elif isinstance(obj, np.ndarray):
-        # print(f"{indent}Converting ndarray to list")
         obj = obj.tolist()
-    # else:
-    #     print(f"{indent}Value Type: {type(obj)}")
+
     return obj
 
 
@@ -44,20 +39,15 @@ def run(args):
     set_random_seed(seed=0)
     task = get_task(args.task)
     logs, cnt_avg, cnt_any = [], 0, 0
-    # 현재 시간을 초 단위까지 가져오기
     current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f"./logs/{args.task}/{args.backend}_{args.n_lambda_value}_{args.task_start_index}_{args.n_select_sample}"
     file_name += f'_fixedB' if not(args.beam_adjustment) else ''
 
-    
     if args.task_end_index == -1:
         args.task_end_index = task.__len__()
 
     file = f'./logs/{args.task}/{args.backend}_{args.n_lambda_value}_{current_time}.json'
-    # file = file_name + f"_{current_time}.json"
 
-
-    # 디렉토리가 존재하지 않으면 생성
     os.makedirs(os.path.dirname(file), exist_ok=True)
     
         
@@ -73,7 +63,6 @@ def run(args):
             import traceback
             traceback.print_exc()
 
-            # 최소 로그 저장
             logs.append({
                 'idx': i,
                 'error': str(e),
@@ -81,21 +70,17 @@ def run(args):
                 'elapsed_time': (datetime.datetime.now() - start_time).total_seconds()
             })
 
-            # 현재까지 로그 저장
             logs = inspect_and_convert(logs)
             with open(file, 'w') as f:
                 json.dump(logs, f, indent=4)
-            continue  # 다음 task로 넘어가기
+            continue  # skip to next task on error
 
-        # ===== 정상 처리 시 =====
         infos = [task.test_output(i, y) for y in ys]
 
         end_time = datetime.datetime.now()
         elapsed_time = (end_time - start_time).total_seconds()
 
         accs = [info['r'] for info in infos]
-        # cnt_avg += sum(accs) / len(accs)
-        # cnt_any += any(accs)
 
         info.update({
             'idx': i,
@@ -103,12 +88,9 @@ def run(args):
             'infos': infos,
             'usage_so_far': args.chat_model.get_llama_usage(),
             'elapsed_time': elapsed_time,
-            # 'cnt_avg': cnt_avg,
-            # 'cnt_any': cnt_any
         })
         logs.append(info)
 
-        # 로그 저장
         logs = inspect_and_convert(logs)
         with open(file, 'w') as f:
             json.dump(logs, f, indent=4)
@@ -116,10 +98,8 @@ def run(args):
         print(info)
         print(i, 'sum(accs)', sum(accs), 'elapsed_time', elapsed_time, '\n')
 
-    # ===== 전체 통계 =====
+    # Final statistics
     n = args.task_end_index - args.task_start_index
-    # print("Final Average Accuracy:", cnt_avg / n)
-    # print("Final Any-Success Rate:", cnt_any / n)
     print("Total Token Usage:", args.chat_model.get_llama_usage())
 
 def parse_args():

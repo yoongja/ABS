@@ -44,17 +44,16 @@ class StrategyqaTask(Task):
         return input
     
     def test_output(self, idx: int, output: str):
-        # breakpoint()
         input = self.get_input(idx)
         gt = input['answer']
         ans = ''
-        
-        # 이상한 output parsing
+
+        # trim off any trailing question reprints
         if 'Q:' in output:
             parsed_output = output.split('Q:')[0].strip()
         else: parsed_output = output.strip()
-        
-        # 최종 결과에서 정답 파싱
+
+        # extract final answer from output
         ans = parsed_output.split('###')[-1].lower().strip().replace('.', '')
         ans = ans.split(" ")
         if len(ans) > 0:
@@ -98,7 +97,6 @@ class StrategyqaTask(Task):
             if (any(x in c['token'].lower() for x in ['yes', 'correct'])) and ('incorrect' not in c['token'].lower()):
                 valid_logprob = c['logprob']
                 break
-                # breakpoint()
             else:
                 top_logprobs = c['top_logprobs']
                 for o in top_logprobs:
@@ -106,10 +104,9 @@ class StrategyqaTask(Task):
                     logprob = o.get('logprob', None)
                     if (token == 'yes' or token == "correct") and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")

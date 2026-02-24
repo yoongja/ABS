@@ -30,13 +30,10 @@ def get_value(task, x, y):
         return 1e-6
 
 def update_values(task, step, x, new_candidates):
-    # values = []
     invalids = []
     for candidate in new_candidates:  # each partial output
         try:
-            # breakpoint()
             cumul_gen = candidate.pack_the_cum_state(step)
-            # breakpoint()
             eval_prob, invalid = get_value(task, x, cumul_gen)
             if eval_prob is None or eval_prob == 0:
                 raise ValueError("Evaluation probability is invalid.")
@@ -73,68 +70,55 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
         prompt = task.cot_prompt_wrap(x, cumul_gen)
     else:
         raise ValueError(f'prompt_sample {prompt_sample} not recognized')
-    # breakpoint()
     raw_samples = []
     n = n_generate_sample
     while n > 0:
         try:
-            # outputs => len == 1(한 번에 생성하는 수)인 리스트
             outputs = gpt(prompt, max_tokens=max_tokens, n=1, logprobs=True, top_logprobs=0, stop=stop)
             sample = outputs[0]
-            # 샘플 구조 확인
             if not isinstance(sample, dict) or 'logprobs' not in sample or 'content' not in sample['logprobs']:
-                # breakpoint()
                 print(f"Error: Sample {len(raw_samples)} has an invalid structure.")
                 continue
 
-            # 샘플 내용 비어있는 경우 처리
             if len(sample['logprobs']['content']) < 1:
                 print(f"Error: Sample {len(raw_samples)} is empty after first attempt.")
-                continue  # 비어 있는 경우 None 반환
+                continue
 
-            # 토큰과 로그 확률 추출
             for t in sample['logprobs']['content']:
                 if not isinstance(t, dict) or 'token' not in t or 'logprob' not in t:
                     print(f"Error: Invalid token structure in sample {len(raw_samples)}.")
-                    continue  # 구조 문제가 있으면 None 반환
-            
+                    continue
+
             raw_samples.append(sample)
             n -= 1
-            
+
         except Exception as e:
             print(f"Error during GPT sampling: {e}")
-            return []  # GPT 호출 실패 시 None 반환
-    # breakpoint()
+            return []
     all_candidates_for_one = []
-    # 각 sample에 대해 logprob 값 구하기
     for i, sample in enumerate(raw_samples):
         try:
             tokens, token_logprobs = [], []
             logprob, cur_line, cur_token_cnt = [], [], 0
             line = ""
 
-            for t in sample['logprobs']['content']:       
+            for t in sample['logprobs']['content']:
                 tokens.append(t['token'])
                 token_logprobs.append(t['logprob'])
 
-            # 로그 확률 계산
+            # skip inf/nan values
             for i, t, lp in zip(range(len(tokens)), tokens, token_logprobs):
-                # inf나 nan -> 계산에서 제외
                 if not math.isfinite(lp):
                     continue
                 logprob.append(lp)
                 cur_line.append(t)
                 cur_token_cnt += 1
 
-            # 확률 계산
             cur_lm_prob = math.exp(sum(logprob) / cur_token_cnt)
-            # probs.append(math.exp(sum(logprob)))
-            
-            # 해당 단계에서 새로 생성된 문장
             line = ''.join(cur_line).strip()
-            
+
             if not is_24:
-                # 만약에 특수문자로 끝나지 않고, .으로도 끝나지 않으면 -> '.\n\n)
+                # append '.\n\n' if the line does not end with a period or punctuation
                 if not(line.endswith('.')) and line[-1].isalnum():
                     line += ".\n\n"
                 else:
@@ -142,23 +126,18 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
             else:
                 line += "\n"
 
-            # 새로 생성된 빔에 대해 처리
             new_gen = OneStepGen(one_step=line, lm_prob=cur_lm_prob, eval_prob=None, trust_score=None)
-            # breakpoint()
-            if step != 0: 
+            if step != 0:
                 new_beam = candidate.clone()
                 new_beam.add_step(new_gen)
             else:
                 candidate.add_step(new_gen)
                 new_beam = candidate
             all_candidates_for_one.append(new_beam)
-            # all_probs.append()
-            
 
         except Exception as e:
             print(f"Error processing sample {i}: {e}")
-            return [] # 개별 샘플 처리 중 오류 발생 시 None 반환
-    # breakpoint()
+            return []
     return all_candidates_for_one
 
 def ours_beam_search(
@@ -178,7 +157,6 @@ def ours_beam_search(
     """
     # 1) Compute trust scores
     all_trust = []
-    # breakpoint()
     for cand in cur_candidates:
         try:
             lm_p = max(float(cand.generations[step].lm_prob or 0), 1e-9)
@@ -288,7 +266,6 @@ def ours_beam_search(
 
 
 # idx -> task input idx
-# 하나의 input에 대해 수행됨
 def solve(args, task, idx, to_print=True):
     max_step = 20 if args.task != 'game24' else 3
     global gpt
@@ -296,10 +273,10 @@ def solve(args, task, idx, to_print=True):
     print(gpt)
     final_beams = []
     final_beams_info = []
-    
+
     x = task.get_input(idx)  # input
-    all_step_infos = []  # 모든 중간 단계의 로깅 데이터를 포함하는 리스트  
-    kept_beams = [BeamHypo() for i in range(args.n_generate_sample)]     # 초기 샘플링 수만큼 빔 객체 생성  
+    all_step_infos = []
+    kept_beams = [BeamHypo() for i in range(args.n_generate_sample)]
     step = 0
 
     while len(final_beams) < args.n_select_sample:
@@ -326,31 +303,27 @@ def solve(args, task, idx, to_print=True):
                 continue
             
         new_ids = list(range(len(new_candidates)))
-        
+
         # 2) Evaluation
         if args.method_select != 'base_beam':
             if args.method_evaluate == 'value':
                 invalids = update_values(task, step, x, new_candidates)
 
-        # selection
-       
-        if (args.method_select == 'beam_search') or (args.method_select == 'base_beam') :
-            new_kept_beams, active_kept_beams, step_infos = ours_beam_search(args.task, step, new_ids, new_candidates,lambda_value=args.n_lambda_value,beam_adjustment=args.beam_adjustment, n_select_sample=args.n_select_sample, final_beams=final_beams,to_print=to_print)
+        # 3) Selection
+        if (args.method_select == 'beam_search') or (args.method_select == 'base_beam'):
+            new_kept_beams, active_kept_beams, step_infos = ours_beam_search(args.task, step, new_ids, new_candidates, lambda_value=args.n_lambda_value, beam_adjustment=args.beam_adjustment, n_select_sample=args.n_select_sample, final_beams=final_beams, to_print=to_print)
             step_info = {"step": step}
             step_info.update(step_infos)
-            
-            if to_print:
-                    bw = step_infos.get('beam_width', '-')
-                    ent = step_infos.get('norm_entropy', '-')
-                    print(f"[STEP {step}] Beam width={bw}, Entropy={ent}")
 
-            # 만약 모든 선택된 상태가 is_finished이고, final beams 의 개수가 모자란 경우 
-            # -> 현재 final beams 를 그냥 최종 결과로
-            
+            if to_print:
+                bw = step_infos.get('beam_width', '-')
+                ent = step_infos.get('norm_entropy', '-')
+                print(f"[STEP {step}] Beam width={bw}, Entropy={ent}")
+
+            # if all selected beams are finished but not enough final beams collected, stop early
             if (len(active_kept_beams) == 0) and (len(final_beams) != args.n_select_sample):
                 all_step_infos.append(step_info)
                 break
-            # breakpoint()
             if isinstance(task, Game24Task) and step == max_step:
                 final_beams = new_kept_beams[: args.n_select_sample]
                 all_step_infos.append(step_info)
@@ -368,21 +341,9 @@ def solve(args, task, idx, to_print=True):
                     all_step_infos.append(step_info)
                     break
             
-            # if a selected node is evaluated as invalid, add feedback to the current node
-            # for i in step_infos['selected_beam_idx']:
-            #     if invalids[i]:
-            #         cur_step = new_candidates[i].get_cur_gen(step).one_step
-            #         invalid_prompt = f'Prior reasoning had an error: {cur_step} Let\'s fix that. Think step by step again, avoiding the mistake above.'
-            #         new_candidates[i].generations[step].one_step = invalid_prompt
-
-            
-            # 해당 단계에서의 선택된 빔 리스트 업데이트
             kept_beams = active_kept_beams
-      
-     
-        # 로그 데이터에 Beam 크기와 Entropy 추가
+
         all_step_infos.append(step_info)
-        # increase step count
         step += 1
         
      

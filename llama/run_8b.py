@@ -56,7 +56,6 @@ def run(args):
             import traceback
             traceback.print_exc()
 
-            # 최소 로그 저장
             logs.append({
                 'idx': i,
                 'error': str(e),
@@ -64,21 +63,17 @@ def run(args):
                 'elapsed_time': (datetime.datetime.now() - start_time).total_seconds()
             })
 
-            # 현재까지 로그 저장
             logs = inspect_and_convert(logs)
             with open(file, 'w') as f:
                 json.dump(logs, f, indent=4)
-            continue  # 다음 task로 넘어가기
+            continue  # skip to next task on error
 
-        # ===== 정상 처리 시 =====
         infos = [task.test_output(i, y) for y in ys]
 
         end_time = datetime.datetime.now()
         elapsed_time = (end_time - start_time).total_seconds()
 
         accs = [info['r'] for info in infos]
-        # cnt_avg += sum(accs) / len(accs)
-        # cnt_any += any(accs)
 
         info.update({
             'idx': i,
@@ -86,12 +81,9 @@ def run(args):
             'infos': infos,
             'usage_so_far': args.chat_model.get_llama_usage(),
             'elapsed_time': elapsed_time,
-            # 'cnt_avg': cnt_avg,
-            # 'cnt_any': cnt_any
         })
         logs.append(info)
 
-        # 로그 저장
         logs = inspect_and_convert(logs)
         with open(file, 'w') as f:
             json.dump(logs, f, indent=4)
@@ -99,10 +91,8 @@ def run(args):
         print(info)
         print(i, 'sum(accs)', sum(accs), 'elapsed_time', elapsed_time, '\n')
 
-    # ===== 전체 통계 =====
+    # Final statistics
     n = args.task_end_index - args.task_start_index
-    # print("Final Average Accuracy:", cnt_avg / n)
-    # print("Final Any-Success Rate:", cnt_any / n)
     print("Total Token Usage:", args.chat_model.get_llama_usage())
 
 def parse_args():

@@ -47,7 +47,6 @@ class CommonsenseqaTask(Task):
     def __len__(self) -> int:
         return len(self.data)
 
-    # x : 하나의 데이터셋 dict 데이터 -> input: question 반환
     def get_input(self, idx: int) -> str:
         raw = self.data[idx]
         input = {"question": raw['question']['stem'], "answerKey": raw['answerKey'], "choices": raw['question']['choices']}
@@ -87,31 +86,24 @@ class CommonsenseqaTask(Task):
         else:
             return {'r': 0}
 
-    # get_samples 에서 사용 -> 해당 프롬프트통해 다음 단계 도출
     @staticmethod
     def cot_prompt_wrap(x: dict, y:str='') -> str:
         question = x['question']
         ops = []
         for o in x['choices']:
             ops.append('(' + o["label"].lower() + ')' + ' ' + o['text'])
-        options = ' '.join(ops) 
+        options = ' '.join(ops)
         return cot_prompt.format(question=question, options=options) + y
 
-    # get_value에서 사용
-    # y: 현재 생성된 후보 ys 중 한개
     @staticmethod
     def value_prompt_wrap(x: dict, y: str) -> str:
-        # last_line = y.strip().split('\n')[-1]
         question = x['question']
         ops = []
         for o in x['choices']:
             ops.append('(' + o["label"].lower() + ')' + ' ' + o['text'])
         options = ' '.join(ops)
-        
         return value_prompt.format(question=question, options=options, output=y)
-    
-    # get_value 에서 사용
-    # gpt에서 생성된 value_outputs parsing -> 해당 y에 대한 value 도출
+
     @staticmethod
     def value_outputs_unwrap(x: str, y: str, value_outputs: list) -> float:
         """
@@ -119,24 +111,20 @@ class CommonsenseqaTask(Task):
         """
         probability = 0.0
         try:
-            # 모든 토큰의 top_logprobs를 순회
             contents = value_outputs[0].get("logprobs", {}).get("content", [])
             for token_info in contents:
                 top_logprobs = token_info.get("top_logprobs", [])
                 for entry in top_logprobs:
                     token = entry.get('token', '').lower()
                     logprob = entry.get('logprob')
-                    # 'valid' 포함 & 'invalid' 미포함일 때 첫 번째만 사용
+                    # use first token containing 'valid' but not 'invalid'
                     if logprob is not None and 'valid' in token and 'invalid' not in token:
-                        # 첫 valid 토큰 로그확률로 확률 계산
                         probability = math.exp(logprob + 1e-9)
-                        # 바로 반환 (첫 번째만 고려)
                         print(f"First valid token: {token}, logprob: {logprob}")
                         print(f"Converted Probability: {probability:.6f}")
                         return probability
         except Exception as e:
             print(f"[ERROR] value_outputs_unwrap failed: {e}")
 
-        # valid 토큰이 없거나 예외 시 0 반환
         print("No valid token found; returning probability=0.0")
         return probability

@@ -12,7 +12,6 @@ def get_values(task, x, ys, n_generate_sample, llama, evaluation_config):
     invalids = []
     
     for batch in itertools.zip_longest(*[iter(ys)] * n_batch, fillvalue=None):
-        # batch = [y1, y2, .., y_batch]
         value_prompts = []
         for y in batch:
             value_prompts.append(task.value_prompt_wrap(x, y))
@@ -50,98 +49,88 @@ def beam_get_samples(task, x, y, n_generate_sample, prompt_sample, llama, genera
 
     samples_with_probs, lines, probs = [], [], []
 
-    # 각 sample에 대해 logprob 값 구하기
     for i, sample in enumerate(samples):
         try:
             tokens, token_logprobs = [], []
             logprob, cur_line, cur_token_cnt = [], [], 0
             line = ""
-            # 샘플 구조 확인
             if not isinstance(sample, dict) or 'logprobs' not in sample or 'content' not in sample['logprobs']:
                 print(f"Error: Sample {i} has an invalid structure.")
-                return None  # 구조 문제가 있으면 즉시 None 반환
+                return None
 
-            # 샘플 내용 비어있는 경우 처리
             if len(sample['logprobs']['content']) < 1:
                 print(f"Error: Sample {i} is empty after first attempt.")
-                return None  # 비어 있는 경우 None 반환
+                return None
 
-            # 토큰과 로그 확률 추출
             for t in sample['logprobs']['content']:
                 if not isinstance(t, dict) or 'token' not in t or 'logprob' not in t:
                     print(f"Error: Invalid token structure in sample {i}.")
-                    return None  # 구조 문제가 있으면 None 반환
-                
+                    return None
+
                 tokens.append(t['token'])
                 token_logprobs.append(t['logprob'])
-            
-            # 로그 확률 계산
+
             for i, t, lp in zip(range(len(tokens)), tokens, token_logprobs):
                 min_log_prob = -50.0
                 lp = max(lp, min_log_prob)
                 logprob.append(lp)
                 cur_line.append(t)
                 cur_token_cnt += 1
-            # 확률 계산 및 문장 연결
             probs.append(math.exp(sum(logprob) / cur_token_cnt))
-            # probs.append(math.exp(sum(logprob)))
             line = ''.join(cur_line)
-        
+
             if not(line.endswith('\n')) and not(line.endswith('.')):
                 line += '.\n\n'
             lines.append(line)
 
         except Exception as e:
             print(f"Error processing sample {i}: {e}")
-            return None  # 개별 샘플 처리 중 오류 발생 시 None 반환
+            return None
 
-    if not probs or not lines:  # 모든 샘플이 비었을 경우
+    if not probs or not lines:
         print("Error: No valid samples were generated.")
         return None
 
-    # 결과 병합
     try:
         concat_lines = [y + _ for _ in lines]
-        # total = sum(probs)
-        # normal_logprobs = [x / total for x in probs]
         samples_with_probs.append(concat_lines)
         samples_with_probs.append(probs)
-    
+
         return samples_with_probs
-    
+
     except Exception as e:
         print(f"Error during final processing: {e}")
-        return None  # 결과 병합 중 오류 발생 시 None 반환
+        return None
 
 def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_adjustment, n_select_sample, q_value, uncertain_type='shannon'):
     print(f"========================beam adjustment: {beam_adjustment}==========================")
     if len(logit_probabilities) == 0 :
         return None
-    # 결합 점수 계산
+    # compute combined trust score
     current_combined_scores = (logit_probabilities ** lambda_value) * (value_probabilities ** (1 - lambda_value))
     current_combined_scores = np.log(current_combined_scores)
 
-    # 원래의 Idx를 찾기위함
-    sorted_indices = np.argsort(-current_combined_scores)  # 음수 부호로 내림차순 정렬
+    # sort by descending combined score; argsort with negative for descending order
+    sorted_indices = np.argsort(-current_combined_scores)
     descend_order_combined_scores = current_combined_scores[sorted_indices]
 
     descend_order_combined_scores = np.exp(descend_order_combined_scores) / np.sum(np.exp(descend_order_combined_scores))
 
     if beam_adjustment:
         norm_value = 0
-        # 정규화
+        # normalize to get sampling probabilities
         sampling_probs = descend_order_combined_scores / np.sum(descend_order_combined_scores)
         print(f"Initial sampling probabilities: {sampling_probs}")
-        
+
         # calculate normalized shannon entropy (default)
         if uncertain_type == "shannon":
-            # entropy normalize를 위한 max entropy 계산
+            # compute max entropy for normalization
             max_probs = np.array([1/len(sampling_probs)] * len(sampling_probs))
             max_entropy = -np.sum(max_probs * np.log(max_probs + 1e-9))
 
-            # 동적 빔 너비 조정을 위한 엔트로피 계산
+            # compute normalized entropy for dynamic beam width adjustment
             entropy = -np.sum(sampling_probs * np.log(sampling_probs + 1e-9))
-            norm_entropy = entropy/max_entropy           
+            norm_entropy = entropy/max_entropy
 
             norm_value = norm_entropy
         
@@ -164,13 +153,13 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
             
             norm_value = norm_tsallis
         
-        threshold = norm_value    
+        threshold = norm_value
         selected_ids = list(range(len(current_combined_scores)))
-        selection_info = []  # 결과를 저장할 리스트    
+        selection_info = []
         cumulative_prob = 0.0
         cumul_pass = False
-        
-        for s, c in enumerate(descend_order_combined_scores):  # 높은 순으로 점수 정렬되어 있음
+
+        for s, c in enumerate(descend_order_combined_scores):  # iterate in descending score order
             original_index = int(sorted_indices[s])
             cumulative_prob += c
             selected_ids.append(original_index)
@@ -184,22 +173,20 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
                 "Pass": bool(cumulative_prob >= threshold)
             }
             selection_info.append(info)
-            # 멈출 조건: 누적 확률 질량이 엔트로피 기준을 초과
+            # stop when cumulative probability mass exceeds the entropy threshold
             if cumulative_prob >= threshold:
                 cumul_pass = True
                 break
         if cumul_pass == True:
             for info in selection_info:
                 info["Pass"] = bool(True)
-        # 0.9에 맞춰서
         if threshold > 0.9:
-            print(f"threshold 0.9이상 beam_size : {len(selection_info)}")
-            # 원래의 평균을 고려함
+            print(f"threshold > 0.9, beam_size before adjustment: {len(selection_info)}")
             score = np.clip(np.mean(current_combined_scores), 0, 1)
             beam_size = int(interpolate(score, [0, 1], [10, 2]))
             selection_info = selection_info[:beam_size]
             selected_ids = sorted_indices[:beam_size]
-            print(f"조정 이후 beam_size : {beam_size}")
+            print(f"beam_size after adjustment: {beam_size}")
 
         if len(selected_ids) == 0:
             max_index = np.argmax(current_combined_scores)
@@ -216,7 +203,7 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
         selection_info = []
         beam = n_select_sample
         print(f"After beam size: {beam}")
-        for i, c in enumerate(descend_order_combined_scores):  # 높은 순으로 점수 정렬되어 있음
+        for i, c in enumerate(descend_order_combined_scores):  # iterate in descending score order
             while i < beam:
                 original_index = int(sorted_indices[i])
                 is_pass = True if i < beam else False
@@ -231,18 +218,16 @@ def et_beam_search(value_probabilities, logit_probabilities, lambda_value, beam_
                     }
                 selection_info.append(info)
         print(f"Valid states (B(S_t)): {selected_ids}")
-    # breakpoint()
     return selected_ids, norm_value, selection_info
 
 # idx -> task input idx
-def solve(args, task, idx, to_print=True):  
+def solve(args, task, idx, to_print=True):
     x = task.get_input(idx)  # input
     ys = ['']  # current output candidates
     infos = []
     already_solves = []
     stop_bol = False
     step = 0
-    # for step in range(task.steps):
     while stop_bol != True and step < 20:
         # generation
         step += 1
@@ -299,11 +284,11 @@ def solve(args, task, idx, to_print=True):
             'new_ys': new_ys,
             'values': values,
             'select_new_ys': select_new_ys,
-            'beam': len(selected_ids),  # 현재 Beam 크기
-            'entropy': entropy,  # 현재 Entropy 값
-            'selection_info': selection_info,  # 선택 정보
-            'logit_probabilities': logit_probabilities,  # 현재 로짓 확률
-            'value_probabilities': values  # 현재 가치 확률
+            'beam': len(selected_ids),
+            'entropy': entropy,
+            'selection_info': selection_info,
+            'logit_probabilities': logit_probabilities,
+            'value_probabilities': values
         }
         if args.uncertainty != "shannon":
             info['Uncertainty'] = args.uncertainty

@@ -67,8 +67,7 @@ class NewlinesStoppingCriteria(StoppingCriteria):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         device = input_ids.device
         batch_ret, seq_len = input_ids.shape    # batch_ret = batch_size * num_return_sequences
-        # breakpoint()
-        
+
         if (self.prompt_lengths) is None :
             logger.warning("Warning: prompt_lengths is not set. Set all prompt_lengths to 0.")
             self.prompt_lengths = [0] * batch_ret
@@ -116,9 +115,6 @@ class Llama:
                 device_map='auto',
                 cache_dir = '/data3/hg_weight/hg_weight'
             )
-            # tokenizer.add_special_tokens({"pad_token": "[PAD]"})    # assign new pad token            
-            # model.resize_token_embeddings(len(tokenizer))
-            # tokenizer.model_max_length = model.config.max_position_embeddings
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
             
@@ -127,13 +123,10 @@ class Llama:
         # =============================================== initialization ===============================================
         if model_name == 'llama-2-7b':
             self.model_path = 'meta-llama/Llama-2-7b-hf'
-            # self.model_path = '/data3/hg_weight/hg_weight/models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9'
         elif model_name == 'llama-2-13b':
             self.model_path = 'meta-llama/Llama-2-13b-hf'
-            # self.model_path = '/data3/hg_weight/hg_weight/models--meta-llama--Llama-2-13b-hf/snapshots/5c31dfb671ce7cfe2d7bb7c04375e44c55e815b1'
         elif model_name == 'llama-2-70b':
             self.model_path = 'meta-llama/Llama-2-70b-hf'
-            # self.model_path = '/data3/hg_weight/hg_weight/models--meta-llama--Llama-2-70b-hf/snapshots/3aba440b59558f995867ba6e1f58f21d0336b5bb'
         elif model_name == 'llama-3.1-8b':
             self.model_path = 'meta-llama/Llama-3.1-8B'
         elif model_name == 'llama-3.1-70b':
@@ -219,7 +212,6 @@ class Llama:
         device = self.model.device
         num_ret = generation_config.num_return_sequences
         
-        # breakpoint()
         if not(is_eval):
             prompt_lengths = (input_ids != self.tokenizer.pad_token_id).sum(dim=1).tolist() # Calculate the length of all batch sequence prompts
         else:
@@ -243,12 +235,11 @@ class Llama:
             return_dict_in_generate=True,
             stopping_criteria=stoppers,
         )   
-        # breakpoint()
         sequences = outputs.sequences                          # (batch*ret, total_seq_len)
         batch_ret, seq_len = sequences.size()
         sequences = sequences.view(batch_size, num_ret, seq_len)    # (batch, ret, seq_len)
         
-        # scores: List[(batch*ret, vocab_size)] 길이=gen_len
+        # scores: List[(batch*ret, vocab_size)], length = gen_len
         stacked = torch.stack(outputs.scores, dim=0).to(device)                 # (gen_len, batch*ret, vocab_size)
         gen_len, _, vocab_size = stacked.shape
         scores = stacked.view(gen_len, batch_size, num_ret, vocab_size)
@@ -269,16 +260,11 @@ class Llama:
                     ):
                         sequences[i, j, stop_idx+1:] = self.tokenizer.pad_token_id  # pad from stop_idx+1 onward
                         gen_stop = stop_idx - expanded_prompt_lengths[i] + 1
-                        # if 0 <= gen_stop < scores.size(2):
-                        #     scores[i, j, gen_stop+1:, :] = float('-inf')    # mask from the next generated token
         
         result = []
         total_completion = 0
         
         for i in range(batch_size):
-            # if is_eval:
-            #     breakpoint()
-            
             all_gen_ids = [sequences[i, j][expanded_prompt_lengths[i]:].tolist() for j in range(num_ret)]
             decoded_texts = self.tokenizer.batch_decode(all_gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             for j in range(num_ret):
@@ -292,7 +278,6 @@ class Llama:
                     logits=logits, gen_ids=log_ids, pad_token_id=self.tokenizer.pad_token_id, top_k=top_k
                 )
 
-                # 텍스트 변환
                 text = decoded_texts[j]
 
                 result.append({

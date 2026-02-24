@@ -50,13 +50,10 @@ def get_value(task, x, y):
         return 1e-6
 
 def update_values(task, step, x, new_candidates):
-    # values = []
     invalids = []
     for candidate in new_candidates:  # each partial output
         try:
-            # breakpoint()
             cumul_gen = candidate.pack_the_cum_state(step)
-            # breakpoint()
             eval_prob, invalid = get_value(task, x, cumul_gen)
             if eval_prob is None or eval_prob == 0:
                 raise ValueError("Evaluation probability is invalid.")
@@ -71,7 +68,6 @@ def update_values(task, step, x, new_candidates):
 def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, prompt_sample, stop):
     is_24 = isinstance(task, Game24Task)
     cumul_gen = candidate.pack_the_cum_state(step)
-    # breakpoint()
     if prompt_sample == 'standard':
         prompt = task.standard_prompt_wrap(x, cumul_gen)
     elif prompt_sample == 'cot':
@@ -81,7 +77,6 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
             prompt = task.cot_prompt_wrap(x, cumul_gen, n_generate_sample)
     else:
         raise ValueError(f'prompt_sample {prompt_sample} not recognized')
-    # breakpoint()
     raw_samples = []
     if is_24 and step != 3:
         n = 1
@@ -89,62 +84,50 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
         n = n_generate_sample
     while n > 0:
         try:
-            # outputs => len == 1(한 번에 생성하는 수)인 리스트
             outputs = gpt(prompt, max_tokens=max_tokens, n=1, logprobs=True, top_logprobs=0, stop=stop)
             sample = outputs[0]
-            # 샘플 구조 확인
             if not isinstance(sample, dict) or 'logprobs' not in sample or 'content' not in sample['logprobs']:
-                # breakpoint()
                 print(f"Error: Sample {len(raw_samples)} has an invalid structure.")
                 continue
 
-            # 샘플 내용 비어있는 경우 처리
             if len(sample['logprobs']['content']) < 1:
                 print(f"Error: Sample {len(raw_samples)} is empty after first attempt.")
-                continue  # 비어 있는 경우 None 반환
+                continue
 
-            # 토큰과 로그 확률 추출
             for t in sample['logprobs']['content']:
                 if not isinstance(t, dict) or 'token' not in t or 'logprob' not in t:
                     print(f"Error: Invalid token structure in sample {len(raw_samples)}.")
-                    continue  # 구조 문제가 있으면 None 반환
-            
+                    continue
+
             raw_samples.append(sample)
             n -= 1
-            
+
         except Exception as e:
             print(f"Error during GPT sampling: {e}")
-            return []  # GPT 호출 실패 시 None 반환
-    # breakpoint()
+            return []
     all_candidates_for_one = []
-    # 각 sample에 대해 logprob 값 구하기
     if is_24 and step != 3:
-        # Game of 24 중간 step에서는 한 번 생성된 output을 줄 단위로 쪼개 각각 후보로 처리
+        # For Game of 24 intermediate steps: split one generated output into per-line candidates
         for sample in raw_samples:
             try:
-                # breakpoint()
                 tokens = []
                 token_logprobs = []
                 for t in sample['logprobs']['content']:
                     tokens.append(t['token'])
                     token_logprobs.append(t['logprob'])
-                # breakpoint()
-                # 줄 단위로 split
-                # (토큰 재조합 시 join으로 라인 나누기)
+
+                # split tokens by newline to get individual candidate equations
                 joined = ''.join(tokens)
                 lines = [line.strip() for line in joined.split('\n') if line.strip()]
 
-                # 각 줄별로 토큰과 로그확률을 매칭
+                # match tokens and log-probs to each line
                 cur_token_idx = 0
                 for _ in range(len(lines)):
-                    # breakpoint()
                     cur_logprob, cur_line, cur_token_cnt = [], [], 0
                     for i, t, lp in zip(range(len(tokens)), tokens, token_logprobs):
                         if i < cur_token_idx: continue
                         if not math.isfinite(lp):
                             continue
-                        # \n 구분된 각 후보 equation에 대하여   
-                        
                         if '\n' not in t:
                             cur_line.append(t)
                             cur_logprob.append(lp)
@@ -157,13 +140,12 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
                                 cur_token_cnt += 1
                             cur_token_idx = i+1
                             break
-                        
+
                     cur_lm_prob = math.exp(sum(cur_logprob) / cur_token_cnt)
                     line = ''.join(cur_line).strip() + "\n"
-        
+
                     if line == "":
                         continue
-                    # 후보 beam 생성
                     new_gen = OneStepGen(one_step=line, lm_prob=cur_lm_prob, eval_prob=None, trust_score=None)
                     if (step != 0) or is_24:
                         new_beam = candidate.clone()
@@ -174,8 +156,8 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
                     all_candidates_for_one.append(new_beam)
             except Exception as e:
                 print(f"Error processing sample: {e}")
-                return [] # 개별 샘플 처리 중 오류 발생 시 None 반환
-            
+                return []
+
     else:
         for i, sample in enumerate(raw_samples):
             try:
@@ -183,28 +165,23 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
                 logprob, cur_line, cur_token_cnt = [], [], 0
                 line = ""
 
-                for t in sample['logprobs']['content']:       
+                for t in sample['logprobs']['content']:
                     tokens.append(t['token'])
                     token_logprobs.append(t['logprob'])
 
-                # 로그 확률 계산
+                # skip inf/nan values
                 for i, t, lp in zip(range(len(tokens)), tokens, token_logprobs):
-                    # inf나 nan -> 계산에서 제외
                     if not math.isfinite(lp):
                         continue
                     logprob.append(lp)
                     cur_line.append(t)
                     cur_token_cnt += 1
 
-                # 확률 계산
                 cur_lm_prob = math.exp(sum(logprob) / cur_token_cnt)
-                # probs.append(math.exp(sum(logprob)))
-                
-                # 해당 단계에서 새로 생성된 문장
                 line = ''.join(cur_line).strip()
-                
+
                 if not is_24:
-                    # 만약에 특수문자로 끝나지 않고, .으로도 끝나지 않으면 -> '.\n\n)
+                    # append '.\n\n' if the line does not end with a period or punctuation
                     if not(line.endswith('.')) and line[-1].isalnum():
                         line += ".\n\n"
                     else:
@@ -212,22 +189,18 @@ def beam_get_samples(task, step, x, candidate, n_generate_sample, max_tokens, pr
                 else:
                     line += "\n"
 
-                # 새로 생성된 빔에 대해 처리
                 new_gen = OneStepGen(one_step=line, lm_prob=cur_lm_prob, eval_prob=None, trust_score=None)
-                # breakpoint()
-                if step != 0: 
+                if step != 0:
                     new_beam = candidate.clone()
                     new_beam.add_step(new_gen)
                 else:
                     candidate.add_step(new_gen)
                     new_beam = candidate
                 all_candidates_for_one.append(new_beam)
-                # all_probs.append()
-                
 
             except Exception as e:
                 print(f"Error processing sample {i}: {e}")
-                return [] # 개별 샘플 처리 중 오류 발생 시 None 반환
+                return []
     return all_candidates_for_one
 
 def ours_beam_search(
@@ -248,7 +221,6 @@ def ours_beam_search(
     """
     # 1) Compute trust scores
     all_trust = []
-    # breakpoint()
     for cand in cur_candidates:
         try:
             lm_p = max(float(cand.generations[step].lm_prob or 0), 1e-9)
@@ -365,18 +337,16 @@ def solve(args, task, idx, to_print=True):
     print(gpt)
     final_beams = []
     final_beams_info = []
-    
+
     x = task.get_input(idx)  # input
-    all_step_infos = []  # 모든 중간 단계의 로깅 데이터를 포함하는 리스트  
-    
+    all_step_infos = []
+
     if is_24:
         kept_beams = [BeamHypo()]
     else:
-        kept_beams = [BeamHypo() for i in range(args.n_generate_sample)]     # 초기 샘플링 수만큼 빔 객체 생성  
+        kept_beams = [BeamHypo() for i in range(args.n_generate_sample)]
     step = 0
-    
-    # breakpoint()
-    
+
     while len(final_beams) < args.n_select_sample:
         # 1) Generation
         new_candidates = [] # list of BeamHypo
@@ -397,15 +367,11 @@ def solve(args, task, idx, to_print=True):
                         prompt_sample=args.prompt_sample,
                         stop=task.stops
                     )
-                    # breakpoint()
                     if samples:
                         new_candidates.extend(samples)
-                        
-                    # print(f"Generated new samples from one beam: {samples}")
-                    
+
             except Exception as e:
                 print(f"[ERROR] Generation failed at step {step}: {e}")
-                # 빈 후보로 대체
                 new_candidates = []
                 continue
             
@@ -437,7 +403,6 @@ def solve(args, task, idx, to_print=True):
             if (len(active_kept_beams) == 0) and (len(final_beams) != args.n_select_sample):
                 all_step_infos.append(step_info)
                 break
-            # breakpoint()
             if isinstance(task, Game24Task) and step == max_step:
                 final_beams = new_kept_beams[: args.n_select_sample]
                 all_step_infos.append(step_info)
@@ -455,12 +420,9 @@ def solve(args, task, idx, to_print=True):
                     all_step_infos.append(step_info)
                     break
 
-            # 해당 단계에서의 선택된 빔 리스트 업데이트
             kept_beams = active_kept_beams
-      
-        # 로그 데이터에 Beam 크기와 Entropy 추가
+
         all_step_infos.append(step_info)
-        # increase step count
         step += 1
         
     # if final_beams_info already exists and you want to add to it:

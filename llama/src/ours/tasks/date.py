@@ -52,10 +52,10 @@ class DateUnderstandingTask(Task):
     
     def test_output(self, idx: int, output: str):        
         input = self.get_input(idx)
-        gts = input['target_scores']    # target dict with keys and value(맞으면 1)
+        gts = input['target_scores']    # target dict: keys are date strings, value 1 = correct
         gt = [key for key, value in gts.items() if value == 1][0]
         
-        # 이상한 output parsing
+        # trim off any trailing question reprints
         if 'Q:' in output:
             parsed_output = output.strip().split('Q:')[0]
         else: parsed_output = output
@@ -75,7 +75,6 @@ class DateUnderstandingTask(Task):
         if is_right: return {'r': 1}
         else: return {'r': 0}
         
-    # get_samples 에서 사용 -> 해당 프롬프트통해 다음 단계 도출
     @staticmethod
     def cot_prompt_wrap(x: dict, y:str='') -> str:
         question = x['input']
@@ -99,7 +98,6 @@ class DateUnderstandingTask(Task):
             if 'yes' in c['token'].lower():
                 valid_logprob = c['logprob']
                 break
-                # breakpoint()
             else:
                 top_logprobs = c['top_logprobs']
                 for o in top_logprobs:
@@ -107,10 +105,9 @@ class DateUnderstandingTask(Task):
                     logprob = o.get('logprob', None)
                     if token == 'yes' and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")

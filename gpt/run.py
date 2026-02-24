@@ -19,25 +19,19 @@ def inspect_and_convert(obj, depth=0):
     """Recursively inspect types and convert ndarray to list."""
     indent = "  " * depth  # Indentation for better readability
     if isinstance(obj, dict):
-        # print(f"{indent}Inspecting dict:")
         for key, value in obj.items():
-            # print(f"{indent}- Key: {key}, Type: {type(value)}")
             obj[key] = inspect_and_convert(value, depth + 1)
     elif isinstance(obj, list):
-        # print(f"{indent}Inspecting list:")
         obj = [inspect_and_convert(item, depth + 1) for item in obj]
     elif isinstance(obj, np.ndarray):
-        # print(f"{indent}Converting ndarray to list")
         obj = obj.tolist()
-    # else:
-    #     print(f"{indent}Value Type: {type(obj)}")
+ 
     return obj
 
 def run(args):
     set_random_seed(seed=0)
     task = get_task(args.task)
     logs, cnt_avg, cnt_any = [], 0, 0
-    # 현재 시간을 초 단위까지 가져오기
     current_time = datetime.datetime.now().strftime("%m%d_%H%M")
 
     file_name = f"./logs/{args.task}/{args.temperature}_ld{args.n_lambda_value}_s{args.n_generate_sample}_b{args.n_select_sample}_start{args.task_start_index}_end{args.task_end_index}_"
@@ -49,9 +43,7 @@ def run(args):
         file = f'./logs/{args.task}/{args.temperature}_lambda_{args.n_lambda_value}_epsilon_{args.n_epsilon_value}_naive_{args.prompt_sample}_sample_{args.n_generate_sample}_start{args.task_start_index}_end{args.task_end_index}_{current_time}.json'
     else:
         file = file_name + f'_{current_time}.json'
-        # file = f'./logs/{args.task}/t{args.temperature}_lambda{args.n_lambda_value}_sp{args.n_generate_sample}_bs{args.n_select_sample}_s{args.task_start_index}_e{args.task_end_index}_{current_time}.json'
 
-    # 디렉토리가 존재하지 않으면 생성
     os.makedirs(os.path.dirname(file), exist_ok=True)
 
     if args.task_end_index == -1:
@@ -71,10 +63,9 @@ def run(args):
         cur_option = task.get_options(i) if not is_24 else None
         gt = task.get_gt(i) if not is_24 else None
         cum_states = [i.pack_the_cum_state(i.length-1) for i in f_beams]
-        infos = [task.test_output(i, y) for y in cum_states]    # 각 최종 빔에 대한 정답 여부 r:0 or 1
-        end_time = datetime.datetime.now()  # 종료 시간 기록
-        elapsed_time = (end_time - start_time).total_seconds()  # 경과 시간(초) 계산
-        # print(type(i), type(ys), type(infos), type(gpt_usage(args.backend)))
+        infos = [task.test_output(i, y) for y in cum_states]  # correctness for each final beam (r: 0 or 1)
+        end_time = datetime.datetime.now()
+        elapsed_time = (end_time - start_time).total_seconds()
 
         accs = [info['r'] for info in infos]
         if sum(accs) == 0: 
@@ -83,7 +74,6 @@ def run(args):
             cnt_avg += sum(accs) / len(accs)
         cnt_any += any(accs)
 
-        # 로그 정보 업데이트
         cur_log = {
             'idx': idx,
             'input': cur_input,
@@ -102,13 +92,11 @@ def run(args):
             json.dump(logs, f, indent=4)        
         
         print(i, 'sum(accs)', sum(accs), 'cnt_avg', cnt_avg, 'cnt_any', cnt_any, 'elapsed_time', elapsed_time, '\n')
-        
-        # print(i, 'sum(accs)', sum(accs), 'cnt_avg', cnt_avg, 'cnt_any', cnt_any, 'elapsed_time', elapsed_time, '\n')
 
-    # 최종 통계
+    # Final statistics
     n = args.task_end_index - args.task_start_index
-    print(cnt_avg / n, cnt_any / n)  # 평균 성공률 및 최소 성공 비율
-    print('usage_so_far', gpt_usage(args.backend))  # API 사용량 출력
+    print(cnt_avg / n, cnt_any / n)
+    print('usage_so_far', gpt_usage(args.backend))
 
 def parse_args():
     args = argparse.ArgumentParser()

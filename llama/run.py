@@ -67,9 +67,8 @@ def run(args):
             logs = inspect_and_convert(logs)
             with open(file, 'w') as f:
                 json.dump(logs, f, indent=4)
-            continue  # 다음 task로 넘어가기
+            continue  # skip to next task on error
 
-        # ===== 정상 처리 시 =====
         infos = [task.test_output(i, y) for y in ys]
 
         end_time = datetime.datetime.now()
@@ -86,7 +85,6 @@ def run(args):
         })
         logs.append(info)
 
-        # 로그 저장
         logs = inspect_and_convert(logs)
         with open(file, 'w') as f:
             json.dump(logs, f, indent=4)
@@ -94,7 +92,7 @@ def run(args):
         print(info)
         print(i, 'sum(accs)', sum(accs), 'elapsed_time', elapsed_time, '\n')
 
-    # ===== 전체 통계 =====
+    # Final statistics
     n = args.task_end_index - args.task_start_index
 
     print("Total Token Usage:", args.chat_model.get_llama_usage())

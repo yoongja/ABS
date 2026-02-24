@@ -16,8 +16,7 @@ class AQUATask(Task):
             self.data = [json.loads(line) for line in f]
             
         self.value_cache = {}
-        self.steps = 16 # step 2개로 제한
-        # self.stops = None
+        self.steps = 16
         self.stops = ['.\n\n', ":\n\n", "\n\n", " \n\n"]
 
     def __len__(self):
@@ -34,7 +33,6 @@ class AQUATask(Task):
     
     def get_gt(self, idx: int) -> str:
         gt_ans = self.data[idx]['correct']
-        # options = self.data[idx][]
         return gt_ans
 
     def test_output(self, idx: int, output: str):
@@ -135,7 +133,6 @@ class AQUATask(Task):
             if 'yes' in c['token'].lower():
                 valid_logprob = c['logprob']
                 break
-                # breakpoint()
             else:
                 top_logprobs = c['top_logprobs']
                 for o in top_logprobs:
@@ -143,10 +140,9 @@ class AQUATask(Task):
                     logprob = o.get('logprob', None)
                     if token == 'yes' and logprob is not None:
                         valid_logprob = logprob
-                        break  # 가장 가까운 for 루프 종료
+                        break  # break inner loop
                 if valid_logprob is not None:
-                    break  # 바깥 루프도 종료
-        # 확률 계산
+                    break  # break outer loop
         if valid_logprob is not None:
             probability = math.exp(valid_logprob)
             print(f"Text: {text_output}")
