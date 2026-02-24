@@ -1,0 +1,28 @@
+# 환경변수 (API 키 등)
+.env
+.env.local
+.env.*.local
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 모델/데이터 파일 (용량 큼)
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.pkl
+
+# 실험 로그
+logs/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# 테스트 캐시
+.pytest_cache/
+.mypy_cache/
